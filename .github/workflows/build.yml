@@ -67,16 +67,8 @@ jobs:
         run: dotnet restore
 
       - name: Build and Publish
-        run: |
-          dotnet publish src/KnightShift/KnightShift.csproj \
-            --configuration Release \
-            --runtime ${{ matrix.runtime }} \
-            --self-contained true \
-            -p:PublishSingleFile=true \
-            -p:PublishTrimmed=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:EnableCompressionInSingleFile=true \
-            --output ./publish/${{ matrix.runtime }}
+        run: dotnet publish src/KnightShift/KnightShift.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true --output ./publish/${{ matrix.runtime }}
+        shell: bash
 
       - name: List published files (Debug)
         run: ls -R ./publish/${{ matrix.runtime }}
