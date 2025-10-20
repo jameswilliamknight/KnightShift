@@ -419,11 +419,15 @@ StyleGuide.CreateTitleRule("Page Title")
 StyleGuide.CreateInputPanel("Label", "content", isActive: true)
 StyleGuide.CreateHotkeyPanel("hotkey text")
 StyleGuide.CreateConfirmationPanel("Title", content)
-StyleGuide.Success("Success message")
-StyleGuide.Warning("Warning message")
-StyleGuide.Error("Error message")
-StyleGuide.Info("Info message")
+
+// Message helpers (automatically escape user data)
+StyleGuide.Success("Success message")   // Auto-escapes with Markup.Escape()
+StyleGuide.Warning("Warning message")   // Auto-escapes with Markup.Escape()
+StyleGuide.Error("Error message")       // Auto-escapes with Markup.Escape()
+StyleGuide.Info("Info message")         // Auto-escapes with Markup.Escape()
 ```
+
+**Note**: The message helpers (`Success()`, `Warning()`, `Error()`, `Info()`) automatically escape their input with `Markup.Escape()`, so you can safely pass user-generated text (like filenames with `[` or `]`) directly to them.
 
 #### Seamless Flow - No Interruptions
 

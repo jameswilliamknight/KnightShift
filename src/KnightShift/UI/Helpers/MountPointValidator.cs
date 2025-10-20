@@ -52,6 +52,23 @@ public static class MountPointValidator
             return (false, "Path contains invalid sequences (//, ..).");
         }
 
+        // Check if directory exists and is non-empty
+        if (Directory.Exists(path))
+        {
+            try
+            {
+                var entries = Directory.EnumerateFileSystemEntries(path);
+                if (entries.Any())
+                {
+                    return (false, $"Directory '{path}' already exists and is not empty. Mount point must be empty.");
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return (false, $"Cannot access directory '{path}' to verify it's empty. Permission denied.");
+            }
+        }
+
         return (true, string.Empty);
     }
 }

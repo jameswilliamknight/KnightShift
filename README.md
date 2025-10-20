@@ -88,37 +88,38 @@ The codebase follows these principles:
 ### Installation
 
 1. Clone or download this repository
-2. Run the setup script to build and install:
+2. Run the start script (it will automatically build if needed):
 
 ```bash
-./setup.sh
+./start
 ```
 
-This will:
+The start script is idempotent and will:
 - Check for .NET SDK installation
-- Restore NuGet packages
-- Build the project in Release mode
+- Restore NuGet packages (only if needed)
+- Build the project in Release mode (only if needed or older than 30 minutes)
 - Optionally create a global symlink for easy access
+- Launch the application
+
+To force a rebuild:
+```bash
+./start --build
+```
 
 ### Creating a Global Symlink
 
 If you want to run `knightshift` from anywhere without specifying the full path, you can create a global symlink:
 
-**Option 1: During setup (recommended)**
-The setup script will prompt you to create a symlink automatically.
+**Option 1: Automatic (recommended)**
+The `./start` script will prompt you to create a symlink automatically on first run.
 
 **Option 2: Manual creation**
 ```bash
 # Navigate to the project directory
 cd /path/to/knightshift
 
-# Create the symlink (requires sudo)
-sudo ln -sf "$(pwd)/src/KnightShift/bin/Release/net9.0/KnightShift" /usr/local/bin/knightshift
-
-# Or create a wrapper script for better portability
-echo '#!/bin/bash' | sudo tee /usr/local/bin/knightshift > /dev/null
-echo "dotnet $(pwd)/src/KnightShift/bin/Release/net9.0/KnightShift.dll \"\$@\"" | sudo tee -a /usr/local/bin/knightshift > /dev/null
-sudo chmod +x /usr/local/bin/knightshift
+# Create the symlink to the start script (requires sudo)
+sudo ln -sf "$(pwd)/start" /usr/local/bin/knightshift
 ```
 
 **Verify the symlink:**
@@ -135,18 +136,25 @@ knightshift --help
 The easiest way to start is interactive mode:
 
 ```bash
-# If installed globally
+# Using the start script
+./start
+
+# Or if installed globally as 'knightshift'
 knightshift
 
 # Or from the build directory
 dotnet run --project src/KnightShift/KnightShift.csproj
 ```
 
-Or explicitly request interactive mode:
+You can also explicitly request interactive mode:
 
 ```bash
+# Using start script
+./start --interactive
+./start -i
+
+# Using global command
 knightshift --interactive
-# or
 knightshift -i
 ```
 
@@ -170,13 +178,18 @@ Interactive mode provides a guided experience through all features:
 
 ### Command-Line Mode
 
-KnightShift also supports direct command-line operations:
+KnightShift also supports direct command-line operations. Examples below show both the global `knightshift` command (if symlink is installed) and the `./start` script:
 
 #### Mount a Drive
 
 ```bash
+# Using global command
 knightshift mount --device /dev/sdb1
 knightshift mount -d /dev/sdb1 -p /mnt/my-usb -t ext4
+
+# Using start script
+./start mount --device /dev/sdb1
+./start mount -d /dev/sdb1 -p /mnt/my-usb -t ext4
 ```
 
 Options:
@@ -189,8 +202,13 @@ Options:
 Remove specific text from all immediate child folder names:
 
 ```bash
+# Using global command
 knightshift rename --path /mnt/usb/Photos --remove-text "IMG_"
 knightshift rename -p /mnt/usb/Photos -r "IMG_" -y
+
+# Using start script
+./start rename -p /mnt/usb/Photos -r "IMG_"
+./start rename -p /mnt/usb/Photos -r "IMG_" -y
 ```
 
 Options:
@@ -206,6 +224,7 @@ Options:
 # - IMG_2024_01_17
 
 knightshift rename -p /mnt/usb/Photos -r "IMG_"
+# or: ./start rename -p /mnt/usb/Photos -r "IMG_"
 
 # After:
 # - 2024_01_15
@@ -216,8 +235,12 @@ knightshift rename -p /mnt/usb/Photos -r "IMG_"
 #### View Folder Statistics
 
 ```bash
+# Using global command
 knightshift stats --path /mnt/usb/Documents
 knightshift stats -p /mnt/usb/Documents
+
+# Using start script
+./start stats -p /mnt/usb/Documents
 ```
 
 Displays:
@@ -232,6 +255,7 @@ Displays:
 1. Mount the SD card:
    ```bash
    knightshift -i
+   # or: ./start -i
    # Select your SD card from the list
    ```
 
@@ -248,6 +272,7 @@ Displays:
 ```bash
 # Mount and start interactive browser
 knightshift -i
+# or: ./start -i
 ```
 
 ### Scripted Bulk Rename
@@ -255,6 +280,7 @@ knightshift -i
 ```bash
 # Rename without confirmation prompt (useful in scripts)
 knightshift rename -p /mnt/usb/Photos -r "prefix_" -y
+# or: ./start rename -p /mnt/usb/Photos -r "prefix_" -y
 ```
 
 ### Check Folder Sizes
@@ -262,6 +288,7 @@ knightshift rename -p /mnt/usb/Photos -r "prefix_" -y
 ```bash
 # Quick stats on a directory
 knightshift stats -p /mnt/usb/Downloads
+# or: ./start stats -p /mnt/usb/Downloads
 ```
 
 ## Configuration
@@ -358,6 +385,14 @@ Replace `PHYSICALDRIVE1` with your actual drive number.
 ### Building from Source
 
 ```bash
+# Quick start: Use the start script (handles restore and build automatically)
+./start
+
+# Force a rebuild
+./start --build
+
+# Or use dotnet commands directly:
+
 # Restore packages
 dotnet restore
 
@@ -412,8 +447,7 @@ knightshift/
 ├── ONESHOT.md                 # Template for recreating this application
 ├── AGENTS.md                  # Instructions for AI coding agents
 ├── CLAUDE.md                  # Claude Code setup instructions
-├── setup.sh
-├── start                       # Idempotent build and run script
+├── start                      # Idempotent build and run script
 └── KnightShift.sln
 ```
 
