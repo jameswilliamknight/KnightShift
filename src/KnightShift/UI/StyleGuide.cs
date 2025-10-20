@@ -120,7 +120,7 @@ public static class StyleGuide
     /// </summary>
     public static Markup Success(string message)
     {
-        return new Markup($"[green]{CheckMark}[/] [bold green]{message}[/]");
+        return new Markup($"[green]{CheckMark}[/] [bold green]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public static class StyleGuide
     /// </summary>
     public static Markup Error(string message)
     {
-        return new Markup($"[red]{CrossMark}[/] [bold red]{message}[/]");
+        return new Markup($"[red]{CrossMark}[/] [bold red]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
@@ -136,7 +136,7 @@ public static class StyleGuide
     /// </summary>
     public static Markup Warning(string message)
     {
-        return new Markup($"[orange1]{WarningIcon}[/] [orange1]{message}[/]");
+        return new Markup($"[orange1]{WarningIcon}[/] [orange1]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
@@ -144,7 +144,7 @@ public static class StyleGuide
     /// </summary>
     public static Markup Info(string message)
     {
-        return new Markup($"[blue]{InfoIcon}[/] [blue]{message}[/]");
+        return new Markup($"[blue]{InfoIcon}[/] [blue]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>

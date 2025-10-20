@@ -49,19 +49,41 @@ public class MountService : IMountCommands
                 mountPoint = Path.Combine(DefaultMountBasePath, deviceName);
             }
 
-            // Create mount point directory if it doesn't exist
-            if (!Directory.Exists(mountPoint))
+            // Check if directory exists
+            if (Directory.Exists(mountPoint))
             {
+                // Verify it's empty
                 try
                 {
-                    Directory.CreateDirectory(mountPoint);
+                    var entries = Directory.EnumerateFileSystemEntries(mountPoint);
+                    if (entries.Any())
+                    {
+                        return new MountResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"Mount point {mountPoint} already exists and is not empty. Cannot mount here."
+                        };
+                    }
                 }
                 catch (UnauthorizedAccessException)
                 {
                     return new MountResult
                     {
                         Success = false,
-                        ErrorMessage = $"Permission denied: Cannot create mount point {mountPoint}. Try running with sudo."
+                        ErrorMessage = $"Cannot access {mountPoint} to verify it's empty. Permission denied."
+                    };
+                }
+            }
+            else
+            {
+                // Create the mount point directory
+                var mkdirResult = await _commandLine.ExecuteAsync("sudo", $"mkdir -p {mountPoint}");
+                if (!mkdirResult.Success)
+                {
+                    return new MountResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Failed to create mount point {mountPoint}: {mkdirResult.Error}"
                     };
                 }
             }

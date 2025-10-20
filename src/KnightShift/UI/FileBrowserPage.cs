@@ -35,22 +35,23 @@ public class FileBrowserPage
     public async Task ShowAsync(string startPath)
     {
         var currentPath = startPath;
+        var mountPointPath = startPath; // Remember the root/mount point
         var running = true;
         var navigationHistory = new Stack<string>();
         string? lastSelectedFolder = null;
 
         while (running)
         {
-            var (shouldContinue, newPath, selectedFolderName) = await ShowBrowserAtPath(currentPath, lastSelectedFolder);
+            var result = await ShowBrowserAtPath(currentPath, mountPointPath, lastSelectedFolder);
 
-            if (!shouldContinue)
+            if (!result.ShouldContinue)
             {
                 running = false;
             }
-            else if (newPath != null)
+            else if (result.NewPath != null)
             {
                 // Check if we're going back (up to parent)
-                if (newPath == _browserService.GetParentPath(currentPath))
+                if (result.NewPath == _browserService.GetParentPath(currentPath))
                 {
                     // Going back - pop from history
                     if (navigationHistory.Count > 0)
@@ -69,13 +70,14 @@ public class FileBrowserPage
                     lastSelectedFolder = null;
                 }
 
-                currentPath = newPath;
+                currentPath = result.NewPath;
             }
         }
     }
 
-    private async Task<(bool shouldContinue, string? newPath, string? selectedFolderName)> ShowBrowserAtPath(
+    private async Task<NavigationResult> ShowBrowserAtPath(
         string currentPath,
+        string mountPointPath,
         string? preSelectedFolder = null)
     {
         AnsiConsole.Clear();
@@ -90,11 +92,11 @@ public class FileBrowserPage
 
         if (entries.Count == 0)
         {
-            return HandleEmptyDirectory(currentPath);
+            return HandleEmptyDirectory(currentPath, mountPointPath);
         }
 
         // Create selectable items
-        var selectableItems = BuildSelectableItems(currentPath, entries);
+        var selectableItems = BuildSelectableItems(currentPath, mountPointPath, entries);
 
         // Find pre-selected item index
         int defaultIndex = FindPreselectedIndex(selectableItems, preSelectedFolder);
@@ -103,25 +105,30 @@ public class FileBrowserPage
         var (selected, action) = FileBrowserNavigationHandler.ShowCustomSelection(selectableItems, defaultIndex);
 
         // Handle navigation actions
-        return await HandleSelectionAsync(selected, action, currentPath);
+        return await HandleSelectionAsync(selected, action, currentPath, mountPointPath);
     }
 
-    private (bool shouldContinue, string? newPath, string? selectedFolderName) HandleEmptyDirectory(string currentPath)
+    private NavigationResult HandleEmptyDirectory(string currentPath, string mountPointPath)
     {
         AnsiConsole.Write(StyleGuide.Warning("This directory is empty or inaccessible."));
         AnsiConsole.WriteLine();
 
+        // Don't go above mount point
+        if (IsAtMountPoint(currentPath, mountPointPath))
+        {
+            return new NavigationResult(true, currentPath); // Stay at mount point
+        }
+
         var parent = _browserService.GetParentPath(currentPath);
-        return (true, parent, null);
+        return new NavigationResult(true, parent);
     }
 
-    private List<SelectableItem> BuildSelectableItems(string currentPath, List<FileSystemEntry> entries)
+    private List<SelectableItem> BuildSelectableItems(string currentPath, string mountPointPath, List<FileSystemEntry> entries)
     {
         var selectableItems = new List<SelectableItem>();
 
-        // Add parent directory option if not at root
-        var parentPath = _browserService.GetParentPath(currentPath);
-        if (parentPath != null)
+        // Add parent directory option if not at mount point
+        if (!IsAtMountPoint(currentPath, mountPointPath))
         {
             selectableItems.Add(new SelectableItem
             {
@@ -169,31 +176,37 @@ public class FileBrowserPage
         return 0;
     }
 
-    private async Task<(bool shouldContinue, string? newPath, string? selectedFolderName)> HandleSelectionAsync(
+    private async Task<NavigationResult> HandleSelectionAsync(
         SelectableItem selected,
         NavigationAction action,
-        string currentPath)
+        string currentPath,
+        string mountPointPath)
     {
-        var parentPath = _browserService.GetParentPath(currentPath);
-
         // Handle navigation actions
         if (action == NavigationAction.GoBack || selected.Type == ItemType.Parent)
         {
-            return (true, parentPath, null);
+            // Don't allow going above mount point
+            if (IsAtMountPoint(currentPath, mountPointPath))
+            {
+                return new NavigationResult(true, currentPath);
+            }
+
+            var parentPath = _browserService.GetParentPath(currentPath);
+            return new NavigationResult(true, parentPath);
         }
         else if (action == NavigationAction.Exit || selected.Type == ItemType.Exit)
         {
-            return (false, null, null);
+            return new NavigationResult(false);
         }
         else if (selected.Type == ItemType.Entry && selected.Entry != null)
         {
             return await HandleEntrySelectionAsync(selected.Entry, action, currentPath);
         }
 
-        return (true, currentPath, null);
+        return new NavigationResult(true, currentPath);
     }
 
-    private async Task<(bool shouldContinue, string? newPath, string? selectedFolderName)> HandleEntrySelectionAsync(
+    private async Task<NavigationResult> HandleEntrySelectionAsync(
         FileSystemEntry entry,
         NavigationAction action,
         string currentPath)
@@ -203,7 +216,7 @@ public class FileBrowserPage
             // If action is EnterFolder, navigate directly
             if (action == NavigationAction.EnterFolder)
             {
-                return (true, entry.FullPath, entry.Name);
+                return new NavigationResult(true, entry.FullPath, entry.Name);
             }
 
             // Otherwise show action menu for directory
@@ -215,11 +228,11 @@ public class FileBrowserPage
         {
             // For files, just show a message
             ShowFileSelected(entry);
-            return (true, currentPath, null);
+            return new NavigationResult(true, currentPath);
         }
     }
 
-    private async Task<(bool shouldContinue, string? newPath, string? selectedFolderName)> HandleDirectoryActionAsync(
+    private async Task<NavigationResult> HandleDirectoryActionAsync(
         FileSystemEntry entry,
         string menuAction,
         string currentPath)
@@ -228,26 +241,26 @@ public class FileBrowserPage
         {
             case var action when action == ActionRemoveText:
                 await _textRemovalPage.ShowAsync(entry);
-                return (true, currentPath, null); // Refresh current directory
+                return new NavigationResult(true, currentPath); // Refresh current directory
 
             case var action when action == ActionProperties:
                 await _propertiesPanel.ShowAsync(entry);
-                return (true, currentPath, null); // Stay in current directory
+                return new NavigationResult(true, currentPath); // Stay in current directory
 
             case var action when action == ActionOpenTerminal:
                 FolderActionHandler.OpenInTerminal(entry.FullPath);
-                return (true, currentPath, null);
+                return new NavigationResult(true, currentPath);
 
             case var action when action == ActionOpenVSCode:
                 FolderActionHandler.OpenInVSCode(entry.FullPath);
-                return (true, currentPath, null);
+                return new NavigationResult(true, currentPath);
 
             case var action when action == ActionGoBack:
-                return (true, currentPath, null); // Stay in current directory
+                return new NavigationResult(true, currentPath); // Stay in current directory
 
             default:
                 // Navigate into the directory
-                return (true, entry.FullPath, entry.Name);
+                return new NavigationResult(true, entry.FullPath, entry.Name);
         }
     }
 
@@ -255,5 +268,17 @@ public class FileBrowserPage
     {
         AnsiConsole.Write(StyleGuide.Info($"Selected file: {entry.Name}"));
         AnsiConsole.WriteLine();
+    }
+
+    /// <summary>
+    /// Checks if the current path is at the mount point (root boundary for navigation)
+    /// </summary>
+    private bool IsAtMountPoint(string currentPath, string mountPointPath)
+    {
+        // Normalize paths for comparison (remove trailing slashes)
+        var normalizedCurrent = currentPath.TrimEnd('/');
+        var normalizedMount = mountPointPath.TrimEnd('/');
+
+        return string.Equals(normalizedCurrent, normalizedMount, StringComparison.OrdinalIgnoreCase);
     }
 }

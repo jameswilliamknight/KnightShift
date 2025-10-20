@@ -80,19 +80,13 @@ public class DriveSelectionPage
 
         AnsiConsole.WriteLine();
 
-        // If drive is already mounted, show action menu
+        // If drive is already mounted, proceed directly to file browser
         if (selectedDrive.IsMounted && !string.IsNullOrWhiteSpace(selectedDrive.MountPoint))
         {
-            var (result, path) = await MountedDriveActionHandler.HandleAsync(selectedDrive, _mountService);
-
-            if (result == MountedDriveActionHandler.ActionResult.BrowseFiles)
-            {
-                return path;
-            }
-            else // GoBack or Unmounted
-            {
-                return null;
-            }
+            AnsiConsole.Write(StyleGuide.Info($"Drive {selectedDrive.DeviceName} is already mounted at {selectedDrive.MountPoint}"));
+            AnsiConsole.WriteLine();
+            AnsiConsole.WriteLine();
+            return selectedDrive.MountPoint;
         }
 
         // Prompt for mount point
@@ -265,7 +259,7 @@ public class DriveSelectionPage
     {
         AnsiConsole.WriteLine();
 
-        MountService.MountResult? result = await AnsiConsole.Status()
+        MountService.MountResult result = await AnsiConsole.Status()
             .Spinner(Spinner.Known.Dots)
             .StartAsync($"Mounting {selectedDrive.DeviceName} to {mountPoint}...", async ctx =>
             {
@@ -286,6 +280,8 @@ public class DriveSelectionPage
         else
         {
             HandleMountFailure(result, selectedDrive);
+            AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Press any key to continue...[/]");
+            Console.ReadKey(true);
             return null;
         }
     }
