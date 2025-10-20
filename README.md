@@ -4,12 +4,6 @@
 
 A powerful command-line TUI (Text User Interface) application for managing drives and organizing files in WSL (Windows Subsystem for Linux).
 
-## Demo
-
-[![Watch the Demo](https://img.youtube.com/vi/0jZpuM9RzsU/maxresdefault.jpg)](https://youtu.be/0jZpuM9RzsU)
-
-**[▶️ Watch Demo Video](https://youtu.be/0jZpuM9RzsU)**
-
 ## Features
 
 - **Smart Drive Detection**: Automatically detects both Linux block devices and Windows drives (via PowerShell integration)
