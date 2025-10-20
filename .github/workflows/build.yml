@@ -123,3 +123,73 @@ jobs:
           name: checksums
           path: checksums.txt
           retention-days: 90
+
+      - name: Prepare release files
+        run: |
+          mkdir -p ./release-assets
+          find ./all-artifacts -type f -exec cp {} ./release-assets/ \;
+          cp checksums.txt ./release-assets/
+          ls -lh ./release-assets/
+
+      - name: Determine next version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get the latest pre-alpha release version
+          LATEST=$(gh release list --repo ${{ github.repository }} --limit 100 | grep "pre-alpha" | head -n1 | awk '{print $1}' || echo "v0.1.0-pre-alpha")
+          echo "Latest version: $LATEST"
+
+          # Extract version numbers (e.g., v0.1.2-pre-alpha -> 0.1.2)
+          VERSION=$(echo $LATEST | sed 's/v\(.*\)-pre-alpha/\1/')
+
+          # Split into major.minor.patch
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}-pre-alpha"
+
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create ${{ steps.version.outputs.version }} \
+            --repo ${{ github.repository }} \
+            --title "Pre-Alpha ${{ steps.version.outputs.version }}" \
+            --notes "🚧 **Automated Pre-Alpha Build**
+
+          Built from commit: ${{ github.sha }}
+
+          ## Downloads
+
+          Choose the binary for your platform:
+          - **Linux x64**: \`knightshift-linux-x64\`
+          - **Linux ARM64**: \`knightshift-linux-arm64\`
+          - **Windows x64**: \`knightshift-windows-x64.exe\`
+          - **Windows ARM64**: \`knightshift-windows-arm64.exe\`
+          - **macOS x64** (Intel): \`knightshift-macos-x64\`
+          - **macOS ARM64** (Apple Silicon): \`knightshift-macos-arm64\`
+          - **Checksums**: \`checksums.txt\`
+
+          ## Installation
+
+          ### Linux/macOS
+          \`\`\`bash
+          # Download the appropriate binary
+          chmod +x knightshift-*
+          sudo mv knightshift-* /usr/local/bin/knightshift
+          \`\`\`
+
+          ### Windows
+          Place the .exe file in a directory in your PATH.
+
+          ---
+          🤖 Auto-built with [Claude Code](https://claude.com/claude-code)" \
+            --prerelease \
+            ./release-assets/*
