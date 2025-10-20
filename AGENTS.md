@@ -406,13 +406,18 @@ switch (action)
 **Always use StyleGuide for consistent styling:**
 
 ```csharp
-// Colors
+// Color CONSTANTS (for use in markup strings)
 StyleGuide.Primary           // "dodgerblue1" (string for markup)
+StyleGuide.SuccessMarkup     // "green" (string for markup)
+StyleGuide.ErrorMarkup       // "red" (string for markup)
+StyleGuide.WarningMarkup     // "orange1" (string for markup)
+StyleGuide.Muted             // "grey" (string for markup)
+
+// Color ENUMS (for use in Style constructors)
 StyleGuide.PrimaryColor      // Color.DodgerBlue1 (Color enum for styles)
-StyleGuide.Muted             // Gray text
-StyleGuide.SuccessColor      // Green
-StyleGuide.WarningColor      // Yellow
-StyleGuide.ErrorColor        // Red
+StyleGuide.SuccessColor      // Color.Green
+StyleGuide.WarningColor      // Color.Orange1
+StyleGuide.ErrorColor        // Color.Red
 
 // Factory Methods
 StyleGuide.CreateTitleRule("Page Title")
@@ -420,11 +425,25 @@ StyleGuide.CreateInputPanel("Label", "content", isActive: true)
 StyleGuide.CreateHotkeyPanel("hotkey text")
 StyleGuide.CreateConfirmationPanel("Title", content)
 
-// Message helpers (automatically escape user data)
+// Message helper METHODS (automatically escape user data)
 StyleGuide.Success("Success message")   // Auto-escapes with Markup.Escape()
 StyleGuide.Warning("Warning message")   // Auto-escapes with Markup.Escape()
 StyleGuide.Error("Error message")       // Auto-escapes with Markup.Escape()
 StyleGuide.Info("Info message")         // Auto-escapes with Markup.Escape()
+```
+
+**CRITICAL: Don't confuse methods with constants!**
+
+```csharp
+// ❌ WRONG - StyleGuide.Success is a METHOD, not a constant
+// This will cause "malformed markup tag" errors!
+new Markup($"[{StyleGuide.Success}]Thank you![/]")
+
+// ✅ CORRECT - Use StyleGuide.SuccessMarkup (the constant)
+new Markup($"[{StyleGuide.SuccessMarkup}]Thank you![/]")
+
+// ✅ OR BETTER - Use the method directly (it handles escaping)
+StyleGuide.Success("Thank you!")
 ```
 
 **Note**: The message helpers (`Success()`, `Warning()`, `Error()`, `Info()`) automatically escape their input with `Markup.Escape()`, so you can safely pass user-generated text (like filenames with `[` or `]`) directly to them.
