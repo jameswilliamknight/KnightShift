@@ -338,6 +338,33 @@ Add this line (replace `<username>` with your username):
 
 **Warning**: Only do this if you understand the security implications.
 
+## Versioning and Releases
+
+KnightShift uses **fully automated versioning** via GitHub Actions:
+
+- Every push to `main` triggers an automatic build and release
+- Version numbers auto-increment in the pre-alpha series (e.g., v0.1.5 → v0.1.6-pre-alpha)
+- Binaries are automatically built for all platforms (Linux x64/ARM64, Windows x64/ARM64, macOS x64/ARM64)
+- Releases are published to GitHub with binaries and checksums
+
+**To get the latest version:**
+```bash
+# View latest release info
+gh release view --json tagName,name,publishedAt
+
+# List recent releases
+gh release list --limit 10
+
+# Or visit: https://github.com/jameswilliamknight/KnightShift/releases
+```
+
+**Download binaries:**
+- Pre-built binaries for all platforms are attached to each release
+- SHA256 checksums included for verification
+- No compilation required - download and run!
+
+For full details on the automated versioning process, see `.cursor/rules/versioning.mdc`.
+
 ## Troubleshooting
 
 ### "No unmounted drives found"

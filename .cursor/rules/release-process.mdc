@@ -1,0 +1,221 @@
+# Release Process for KnightShift
+
+## For AI Assistants: How Releases Work
+
+This document explains the **fully automated release process** for KnightShift. As an AI assistant, you should understand this process to avoid creating version conflicts.
+
+## 🚨 CRITICAL: DO NOT MANUALLY RELEASE
+
+**NEVER** perform any of these actions:
+- ❌ Create git tags with `git tag`
+- ❌ Create GitHub releases with `gh release create`
+- ❌ Add `<Version>` properties to `.csproj` files
+- ❌ Modify version numbers anywhere in the codebase
+- ❌ Try to "help" with versioning
+
+**WHY?** The GitHub Actions workflow handles ALL versioning automatically.
+
+## How the Automated Process Works
+
+### Trigger
+Every push to the `main` branch triggers `.github/workflows/build.yml`
+
+### Version Calculation (lines 137-162)
+1. Workflow queries GitHub API for all releases
+2. Filters for `-pre-alpha` suffix using awk pattern matching
+3. Extracts the latest version (e.g., `v0.1.5-pre-alpha`)
+4. Increments the **PATCH** version by 1 (e.g., `v0.1.6-pre-alpha`)
+5. Stores new version in `$GITHUB_OUTPUT`
+
+### Build Process
+The workflow builds binaries for:
+- **Linux**: x64, ARM64
+- **Windows**: x64, ARM64
+- **macOS**: x64 (Intel), ARM64 (Apple Silicon)
+
+All binaries are:
+- Self-contained (include .NET runtime)
+- Single-file executables
+- Compressed
+
+### Release Creation
+The workflow automatically:
+1. Creates a git tag with the new version
+2. Creates a GitHub release marked as "Pre-release"
+3. Uploads all platform binaries
+4. Generates SHA256 checksums for verification
+5. Includes auto-generated release notes
+
+## What You CAN Do
+
+### Checking Latest Version
+
+When a user asks "what version am I on?" or "what's the latest version?", use:
+
+```bash
+# Get latest release info
+gh release view --json tagName,name,publishedAt
+
+# List recent releases
+gh release list --limit 10
+
+# View specific release details
+gh release view v0.1.5-pre-alpha
+```
+
+### Predicting Next Version
+
+When a user asks "what version will this be?", you can predict:
+
+```bash
+# Get latest release tag
+LATEST=$(gh release list --limit 1 | awk '{print $3}')
+echo "Latest release: $LATEST"
+echo "Next release will be: (incremented patch version)"
+```
+
+**Example:**
+- Latest: `v0.1.5-pre-alpha`
+- Next: `v0.1.6-pre-alpha` (automatic after push)
+
+### Viewing Build Status
+
+Check if a release workflow is currently running:
+
+```bash
+# View recent workflow runs
+gh run list --workflow=build.yml --limit 5
+
+# View specific run
+gh run view <run-id>
+```
+
+### Downloading Binaries
+
+Users can download pre-built binaries:
+
+```bash
+# List assets for a release
+gh release view v0.1.5-pre-alpha --json assets
+
+# Download a specific binary
+gh release download v0.1.5-pre-alpha -p knightshift-linux-x64
+```
+
+## Common Scenarios
+
+### Scenario: User asks to create a release
+
+**Wrong Response:**
+```bash
+# ❌ DO NOT DO THIS
+git tag -a v0.2.0 -m "Release v0.2.0"
+gh release create v0.2.0
+```
+
+**Correct Response:**
+```
+KnightShift uses fully automated releases via GitHub Actions.
+When you push to main, a new release is automatically created.
+
+Current latest: v0.1.5-pre-alpha
+After your next push: v0.1.6-pre-alpha (automatic)
+
+Just commit and push your changes - the workflow will handle the rest!
+```
+
+### Scenario: User wants to know the current version
+
+**Correct Response:**
+```bash
+# Check latest release
+gh release view --json tagName,name
+```
+
+### Scenario: Version conflict occurred
+
+If a manual tag was accidentally created, follow the cleanup process in `.cursor/rules/versioning.mdc` under "Troubleshooting Version Conflicts".
+
+### Scenario: User wants to transition from pre-alpha to beta
+
+**Correct Response:**
+```
+To transition to beta:
+1. Manually create the first beta tag:
+   git tag -a v0.2.0-beta -m "First beta release"
+   git push --tags
+
+2. Update .github/workflows/build.yml line 143:
+   Change the awk pattern from `-pre-alpha` to `-beta`
+
+3. Future pushes will auto-increment beta versions (v0.2.1-beta, etc.)
+```
+
+## Workflow Reference
+
+**File**: `.github/workflows/build.yml`
+
+**Key Sections:**
+- **Lines 4-8**: Triggers (push to main, PRs, manual dispatch)
+- **Lines 137-162**: Version calculation logic
+- **Lines 164-201**: Release creation with binaries
+- **Lines 102-128**: Checksum generation
+
+**Permissions:**
+- `contents: write` - Required for creating releases and tags
+
+## Emergency: Workflow is Broken
+
+If the automated workflow fails:
+
+1. **Check workflow runs:**
+   ```bash
+   gh run list --workflow=build.yml --limit 5
+   ```
+
+2. **View failure details:**
+   ```bash
+   gh run view <run-id> --log-failed
+   ```
+
+3. **Common issues:**
+   - Version parsing regex broke (check line 143)
+   - Build failure for specific platform (check build logs)
+   - GitHub API rate limits (wait and retry)
+   - Permissions issue (check `permissions:` in workflow)
+
+## For Human Developers
+
+If you need to manually intervene (rare):
+
+1. **Skip a broken build:**
+   - Fix the issue in a new commit
+   - Push to main
+   - Workflow will create the next version
+
+2. **Delete a bad release:**
+   ```bash
+   # Delete release and tag
+   gh release delete vX.Y.Z-pre-alpha --yes
+   git tag -d vX.Y.Z-pre-alpha
+   git push origin :refs/tags/vX.Y.Z-pre-alpha
+   ```
+
+3. **Rebuild a specific version:**
+   - Not supported in current workflow
+   - Workflow always builds from `main` HEAD
+
+## Summary for AI Assistants
+
+**Golden Rule:** Trust the automation. Don't try to help with versioning.
+
+**Your Role:**
+- ✅ Help users understand how automation works
+- ✅ Check current version with `gh release` commands
+- ✅ Predict next version (latest + 1 patch)
+- ✅ Direct users to releases page for downloads
+
+**Not Your Role:**
+- ❌ Create tags or releases
+- ❌ Modify version numbers
+- ❌ "Fix" version conflicts (use versioning.mdc cleanup process)
