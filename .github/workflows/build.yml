@@ -139,8 +139,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the latest pre-alpha release version
-          LATEST=$(gh release list --repo ${{ github.repository }} --limit 100 | grep "pre-alpha" | head -n1 | awk '{print $1}' || echo "v0.1.0-pre-alpha")
+          # Get the latest pre-alpha release TAG (3rd column)
+          LATEST=$(gh release list --repo ${{ github.repository }} --limit 100 | grep "pre-alpha" | head -n1 | awk '{print $3}' || echo "v0.1.0-pre-alpha")
           echo "Latest version: $LATEST"
 
           # Extract version numbers (e.g., v0.1.2-pre-alpha -> 0.1.2)
