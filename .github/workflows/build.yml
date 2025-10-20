@@ -167,7 +167,7 @@ jobs:
         run: |
           gh release create ${{ steps.version.outputs.version }} \
             --repo ${{ github.repository }} \
-            --title "Pre-Alpha ${{ steps.version.outputs.version }}" \
+            --title "KnightShift ${{ steps.version.outputs.version }}" \
             --notes "🚧 **Automated Pre-Alpha Build**
 
           Built from commit: ${{ github.sha }}
