@@ -1,0 +1,286 @@
+using Spectre.Console;
+using KnightShift.Models;
+using KnightShift.Services;
+
+namespace KnightShift.UI;
+
+/// <summary>
+/// UI page for regex-based folder renaming with live preview
+/// </summary>
+public class TextRemovalPage
+{
+    private readonly FolderRenameService _renameService;
+    private readonly FileSystemBrowserService _browserService;
+
+    public TextRemovalPage(FolderRenameService renameService, FileSystemBrowserService browserService)
+    {
+        _renameService = renameService;
+        _browserService = browserService;
+    }
+
+    /// <summary>
+    /// Shows the regex replace UI with live preview
+    /// </summary>
+    public async Task<bool> ShowAsync(FileSystemEntry selectedFolder)
+    {
+        string searchPattern = "";
+        string replacement = "";
+        bool useRegex = true;
+        bool continueEditing = true;
+
+        while (continueEditing)
+        {
+            AnsiConsole.Clear();
+            AnsiConsole.Write(StyleGuide.CreateTitleRule($"Rename Folders with Regex Replace"));
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine($"[{StyleGuide.MutedColor}]Parent folder:[/] [bold]{selectedFolder.Name}[/]");
+            AnsiConsole.MarkupLine($"[{StyleGuide.MutedColor}]Full path:[/] {selectedFolder.FullPath}");
+            AnsiConsole.WriteLine();
+
+            // Show current patterns if set
+            if (!string.IsNullOrEmpty(searchPattern) || !string.IsNullOrEmpty(replacement))
+            {
+                var patternPanel = new Panel(
+                    new Markup(
+                        $"[bold]Search Pattern:[/] [yellow]{Markup.Escape(searchPattern)}[/]\n" +
+                        $"[bold]Replacement:[/] [green]{Markup.Escape(replacement)}[/]\n" +
+                        $"[bold]Mode:[/] {(useRegex ? "[cyan]Regex[/]" : "[cyan]Literal[/]")}"
+                    )
+                )
+                {
+                    Header = new PanelHeader("Current Pattern"),
+                    Border = BoxBorder.Rounded,
+                    BorderStyle = new Style(Color.MediumPurple),
+                    Padding = new Padding(1, 0)
+                };
+                AnsiConsole.Write(patternPanel);
+                AnsiConsole.WriteLine();
+            }
+
+            // Generate and show preview
+            if (!string.IsNullOrWhiteSpace(searchPattern))
+            {
+                var previews = _renameService.GenerateRenamePreview(selectedFolder.FullPath, searchPattern, replacement, useRegex);
+
+                if (previews.Count > 0)
+                {
+                    ShowPreview(previews, searchPattern, replacement);
+                    AnsiConsole.WriteLine();
+
+                    var willChange = previews.Count(p => p.WillChange);
+                    var hasConflicts = previews.Count(p => p.HasConflict);
+
+                    if (willChange > 0)
+                    {
+                        AnsiConsole.MarkupLine($"[{StyleGuide.SuccessColor}]{willChange}[/] folder(s) will be renamed.");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[{StyleGuide.WarningColor}]No folders will be renamed (pattern not found).[/]");
+                    }
+
+                    if (hasConflicts > 0)
+                    {
+                        AnsiConsole.MarkupLine($"[{StyleGuide.WarningColor}]{hasConflicts} rename(s) will be skipped due to conflicts.[/]");
+                    }
+
+                    AnsiConsole.WriteLine();
+
+                    // Action menu
+                    var action = AnsiConsole.Prompt(
+                        new SelectionPrompt<string>()
+                            .Title($"[{StyleGuide.PrimaryColor}]What would you like to do?[/]")
+                            .AddChoices(new[]
+                            {
+                                "Apply Changes",
+                                "Edit Search Pattern",
+                                "Edit Replacement",
+                                "Toggle Regex/Literal Mode",
+                                "Cancel and Go Back"
+                            })
+                    );
+
+                    switch (action)
+                    {
+                        case "Apply Changes":
+                            if (willChange == 0)
+                            {
+                                AnsiConsole.Write(StyleGuide.Warning("No changes to apply."));
+                                await Task.Delay(1500);
+                                continue;
+                            }
+
+                            var confirm = AnsiConsole.Confirm(
+                                $"[{StyleGuide.PrimaryColor}]Apply {willChange} rename(s)?[/]",
+                                defaultValue: false
+                            );
+
+                            if (confirm)
+                            {
+                                return await ApplyChanges(previews);
+                            }
+                            break;
+
+                        case "Edit Search Pattern":
+                            searchPattern = GetSearchPattern(searchPattern);
+                            break;
+
+                        case "Edit Replacement":
+                            replacement = GetReplacement(replacement);
+                            break;
+
+                        case "Toggle Regex/Literal Mode":
+                            useRegex = !useRegex;
+                            AnsiConsole.Write(StyleGuide.Info($"Switched to {(useRegex ? "Regex" : "Literal")} mode."));
+                            await Task.Delay(1000);
+                            break;
+
+                        case "Cancel and Go Back":
+                            return false;
+                    }
+                }
+                else
+                {
+                    AnsiConsole.Write(StyleGuide.Info("No folders found in the selected directory."));
+                    AnsiConsole.WriteLine();
+                    AnsiConsole.MarkupLine("Press any key to go back...");
+                    Console.ReadKey(true);
+                    return false;
+                }
+            }
+            else
+            {
+                // First time - get initial pattern
+                AnsiConsole.MarkupLine($"[{StyleGuide.MutedColor}]Enter a search pattern to begin. Use .NET regex syntax.[/]");
+                AnsiConsole.MarkupLine($"[{StyleGuide.MutedColor}]Examples:[/]");
+                AnsiConsole.MarkupLine($"  [yellow]IMG_[/] - Remove 'IMG_' prefix");
+                AnsiConsole.MarkupLine($"  [yellow]^\\d{{4}}_[/] - Remove date prefix like '2024_'");
+                AnsiConsole.MarkupLine($"  [yellow]\\s+[/] - Replace multiple spaces with single space");
+                AnsiConsole.WriteLine();
+
+                searchPattern = GetSearchPattern("");
+                if (string.IsNullOrWhiteSpace(searchPattern))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private string GetSearchPattern(string currentValue)
+    {
+        AnsiConsole.WriteLine();
+        return AnsiConsole.Prompt(
+            new TextPrompt<string>($"[{StyleGuide.AccentColor}]Search Pattern (regex):[/]")
+                .DefaultValue(currentValue)
+                .AllowEmpty()
+        );
+    }
+
+    private string GetReplacement(string currentValue)
+    {
+        AnsiConsole.WriteLine();
+        return AnsiConsole.Prompt(
+            new TextPrompt<string>($"[{StyleGuide.AccentColor}]Replacement:[/]")
+                .DefaultValue(currentValue)
+                .AllowEmpty()
+        );
+    }
+
+    private void ShowPreview(List<RenamePreview> previews, string searchPattern, string replacement)
+    {
+        // Create a table for the preview
+        var table = new Table()
+            .Border(TableBorder.Rounded)
+            .BorderColor(Color.DodgerBlue1)
+            .Expand();
+
+        table.AddColumn(new TableColumn("").Width(2));
+        table.AddColumn(new TableColumn("[bold]Before[/]").LeftAligned());
+        table.AddColumn(new TableColumn("→").Width(3).Centered());
+        table.AddColumn(new TableColumn("[bold]After[/]").LeftAligned());
+
+        // Show first 20 items (to avoid overwhelming display)
+        foreach (var preview in previews.Take(20))
+        {
+            var icon = preview.StatusIcon;
+            var beforeText = Markup.Escape(preview.OriginalName);
+            var afterText = Markup.Escape(preview.NewName);
+
+            if (preview.HasConflict)
+            {
+                afterText = $"[{StyleGuide.WarningColor}]{afterText} (conflict)[/]";
+            }
+            else if (preview.WillChange)
+            {
+                afterText = $"[{StyleGuide.SuccessColor}]{afterText}[/]";
+            }
+            else
+            {
+                afterText = $"[{StyleGuide.MutedColor}]{afterText}[/]";
+            }
+
+            table.AddRow(icon, beforeText, "→", afterText);
+        }
+
+        if (previews.Count > 20)
+        {
+            table.AddRow("", $"[{StyleGuide.MutedColor}]... and {previews.Count - 20} more[/]", "", "");
+        }
+
+        var panel = StyleGuide.CreateStandardPanel(
+            $"Preview - Search: '{Markup.Escape(searchPattern)}' Replace: '{Markup.Escape(replacement)}'",
+            table
+        );
+        AnsiConsole.Write(panel);
+    }
+
+    private async Task<bool> ApplyChanges(List<RenamePreview> previews)
+    {
+        // Apply renames
+        var result = await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync("Renaming folders...", async ctx =>
+            {
+                return await _renameService.ApplyRenamesAsync(previews);
+            });
+
+        AnsiConsole.WriteLine();
+
+        // Show results
+        if (result.Successful > 0)
+        {
+            AnsiConsole.Write(StyleGuide.Success($"Successfully renamed {result.Successful} folder(s)."));
+            AnsiConsole.WriteLine();
+        }
+
+        if (result.Skipped > 0)
+        {
+            AnsiConsole.MarkupLine($"[{StyleGuide.WarningColor}]Skipped {result.Skipped} folder(s).[/]");
+        }
+
+        if (result.HasErrors)
+        {
+            AnsiConsole.Write(StyleGuide.Error($"Failed to rename {result.Failed} folder(s)."));
+            AnsiConsole.WriteLine();
+
+            foreach (var error in result.Errors.Take(5))
+            {
+                AnsiConsole.MarkupLine($"  [{StyleGuide.MutedColor}]• {error}[/]");
+            }
+
+            if (result.Errors.Count > 5)
+            {
+                AnsiConsole.MarkupLine($"  [{StyleGuide.MutedColor}]... and {result.Errors.Count - 5} more errors[/]");
+            }
+        }
+
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"[{StyleGuide.MutedColor}]Press any key to continue...[/]");
+        Console.ReadKey(true);
+
+        return result.Successful > 0;
+    }
+}

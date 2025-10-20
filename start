@@ -1,0 +1,175 @@
+#!/bin/bash
+
+# KnightShift - Start Script
+# Idempotent script that builds if needed and runs the application
+
+set -e  # Exit on error
+
+# Resolve the actual script location even if called through a symlink
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+cd "$SCRIPT_DIR"
+
+BUILD_PATH="src/KnightShift/bin/Release/net9.0/KnightShift.dll"
+PROJECT_ASSETS="src/KnightShift/obj/project.assets.json"
+BUILD_AGE_THRESHOLD=1800  # 30 minutes in seconds
+
+# Parse flags for this script
+FORCE_BUILD=false
+APP_ARGS=()
+
+for arg in "$@"; do
+    case $arg in
+        -b|--build)
+            FORCE_BUILD=true
+            ;;
+        *)
+            APP_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+# Check if .NET SDK is installed
+if ! command -v dotnet &> /dev/null; then
+    echo "❌ Error: .NET SDK is not installed."
+    echo ""
+    echo "Please install .NET 9.0 SDK or higher:"
+    echo "  https://dotnet.microsoft.com/download"
+    echo ""
+    exit 1
+fi
+
+# Function to check if build is needed
+needs_build() {
+    # If build output doesn't exist, need to build
+    if [ ! -f "$BUILD_PATH" ]; then
+        return 0
+    fi
+
+    # Check if build is older than threshold
+    if [ "$(uname)" == "Darwin" ]; then
+        # macOS
+        BUILD_TIME=$(stat -f %m "$BUILD_PATH" 2>/dev/null || echo 0)
+    else
+        # Linux
+        BUILD_TIME=$(stat -c %Y "$BUILD_PATH" 2>/dev/null || echo 0)
+    fi
+
+    CURRENT_TIME=$(date +%s)
+    AGE=$((CURRENT_TIME - BUILD_TIME))
+
+    if [ $AGE -gt $BUILD_AGE_THRESHOLD ]; then
+        return 0
+    fi
+
+    # Build is recent
+    return 1
+}
+
+# Function to check if restore is needed
+needs_restore() {
+    # If project.assets.json doesn't exist, need to restore
+    if [ ! -f "$PROJECT_ASSETS" ]; then
+        return 0
+    fi
+
+    # Check if any .csproj files are newer than project.assets.json
+    if [ "$(uname)" == "Darwin" ]; then
+        ASSETS_TIME=$(stat -f %m "$PROJECT_ASSETS" 2>/dev/null || echo 0)
+    else
+        ASSETS_TIME=$(stat -c %Y "$PROJECT_ASSETS" 2>/dev/null || echo 0)
+    fi
+
+    for csproj in $(find src -name "*.csproj"); do
+        if [ "$(uname)" == "Darwin" ]; then
+            CSPROJ_TIME=$(stat -f %m "$csproj" 2>/dev/null || echo 0)
+        else
+            CSPROJ_TIME=$(stat -c %Y "$csproj" 2>/dev/null || echo 0)
+        fi
+
+        if [ $CSPROJ_TIME -gt $ASSETS_TIME ]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Restore packages if needed
+if needs_restore; then
+    echo "📦 Restoring NuGet packages..."
+    dotnet restore KnightShift.sln --verbosity quiet
+    echo "✓ Packages restored"
+else
+    echo "✓ Packages already restored (skipping)"
+fi
+
+# Build if needed or forced
+if [ "$FORCE_BUILD" = true ] || needs_build; then
+    if [ "$FORCE_BUILD" = true ]; then
+        echo "🔨 Building (forced)..."
+    elif [ -f "$BUILD_PATH" ]; then
+        # Calculate age for display
+        if [ "$(uname)" == "Darwin" ]; then
+            BUILD_TIME=$(stat -f %m "$BUILD_PATH")
+        else
+            BUILD_TIME=$(stat -c %Y "$BUILD_PATH")
+        fi
+        CURRENT_TIME=$(date +%s)
+        AGE_MINUTES=$(( (CURRENT_TIME - BUILD_TIME) / 60 ))
+        echo "🔨 Building (last build was ${AGE_MINUTES} minutes ago)..."
+    else
+        echo "🔨 Building (no previous build found)..."
+    fi
+
+    dotnet build KnightShift.sln -c Release --verbosity quiet --no-restore
+    echo "✓ Build complete"
+else
+    echo "✓ Build is recent (skipping)"
+fi
+
+# Verify build output exists
+if [ ! -f "$BUILD_PATH" ]; then
+    echo "❌ Error: Build output not found at $BUILD_PATH"
+    exit 1
+fi
+
+# Check if global symlink exists and offer to create it
+SYMLINK_PATH="/usr/local/bin/knightshift"
+if [ ! -e "$SYMLINK_PATH" ] && [ -t 0 ]; then
+    # Only prompt if running interactively (stdin is a terminal)
+    echo ""
+    echo "ℹ️  Global symlink not found at: $SYMLINK_PATH"
+    read -p "Would you like to create it? This allows you to run 'knightshift' from anywhere (y/n) " -n 1 -r
+    echo ""
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Creating symlink (requires sudo)..."
+
+        # Create symlink to the start script
+        if sudo ln -sf "$SCRIPT_DIR/start" "$SYMLINK_PATH"; then
+            echo "✓ Symlink created at $SYMLINK_PATH"
+            echo ""
+            echo "You can now run: knightshift"
+        else
+            echo "❌ Failed to create symlink"
+        fi
+        echo ""
+    else
+        echo "Skipping symlink creation."
+        echo ""
+    fi
+fi
+
+echo ""
+echo "🚀 Starting KnightShift..."
+echo ""
+
+# Run the application with filtered arguments (excluding --build/-b)
+dotnet "$BUILD_PATH" "${APP_ARGS[@]}"
