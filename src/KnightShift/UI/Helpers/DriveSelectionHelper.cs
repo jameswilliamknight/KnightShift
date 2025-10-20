@@ -34,10 +34,11 @@ public static class DriveSelectionHelper
             )
         )
         {
-            Header = new PanelHeader("Mount Point Help"),
+            Header = new PanelHeader("Mount Point Help", Justify.Center),
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(Color.Aqua),
-            Padding = new Padding(1, 0)
+            Padding = new Padding(2, 1),
+            Expand = true
         };
         AnsiConsole.Write(helpPanel);
         Console.ReadKey(true);
@@ -78,10 +79,11 @@ public static class DriveSelectionHelper
             )
         )
         {
-            Header = new PanelHeader("Confirm Mount Operation"),
+            Header = new PanelHeader("Confirm Mount Operation", Justify.Center),
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(Color.Yellow),
-            Padding = new Padding(1, 0)
+            Padding = new Padding(2, 1),
+            Expand = true
         };
         AnsiConsole.Write(confirmPanel);
         AnsiConsole.WriteLine();

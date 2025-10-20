@@ -29,108 +29,100 @@ public class DriveSelectionPage
     /// </summary>
     public async Task<string?> ShowAsync()
     {
-        AnsiConsole.Clear();
-        AnsiConsole.Write(StyleGuide.CreateTitleRule("KnightShift - Drive Selection"));
-        AnsiConsole.WriteLine();
-
-        // Check sudo privileges
-        var hasSudo = await AnsiConsole.Status()
-            .StartAsync("Checking privileges...", async ctx => await _mountService.HasSudoPrivilegesAsync());
-
-        if (!hasSudo)
+        // Loop to allow returning to drive selection after unmount
+        while (true)
         {
-            ShowSudoRequiredMessage();
-            return null;
-        }
+            AnsiConsole.Clear();
+            AnsiConsole.Write(StyleGuide.CreateTitleRule("KnightShift - Drive Selection"));
+            AnsiConsole.WriteLine();
 
-        // Get all drives (both mounted and unmounted)
-        List<DetectedDrive>? drives = await AnsiConsole.Status()
-            .StartAsync("Scanning for drives...", async ctx =>
+            // Check sudo privileges
+            var hasSudo = await AnsiConsole.Status()
+                .StartAsync("Checking privileges...", async ctx => await _mountService.HasSudoPrivilegesAsync());
+
+            if (!hasSudo)
             {
-                return await _driveService.GetAllDrivesAsync();
-            });
-
-        if (drives == null || drives.Count == 0)
-        {
-            ShowNoDrivesFoundMessage();
-            return null;
-        }
-
-        // Show stage description
-        ShowStageHeader(drives);
-
-        // Handle single drive scenario
-        if (drives.Count == 1)
-        {
-            var shouldContinue = await HandleSingleDriveAsync(drives[0]);
-            if (!shouldContinue)
-            {
+                ShowSudoRequiredMessage();
                 return null;
             }
-        }
-        else
-        {
-            RenderDriveSummary(drives);
-        }
 
-        // Select drive (auto-select if only one, otherwise prompt)
-        DetectedDrive selectedDrive = drives.Count == 1
-            ? drives[0]
-            : PromptForDriveSelection(drives);
+            // Get all drives (both mounted and unmounted)
+            List<DetectedDrive>? drives = await AnsiConsole.Status()
+                .StartAsync("Scanning for drives...", async ctx =>
+                {
+                    return await _driveService.GetAllDrivesAsync();
+                });
 
-        AnsiConsole.WriteLine();
+            if (drives == null || drives.Count == 0)
+            {
+                ShowNoDrivesFoundMessage();
+                return null;
+            }
 
-        // If drive is already mounted, proceed directly to file browser
-        if (selectedDrive.IsMounted && !string.IsNullOrWhiteSpace(selectedDrive.MountPoint))
-        {
-            AnsiConsole.Write(StyleGuide.Info($"Drive {selectedDrive.DeviceName} is already mounted at {selectedDrive.MountPoint}"));
+            // Show stage description
+            ShowStageHeader(drives);
+
+            // Handle single drive scenario
+            if (drives.Count == 1)
+            {
+                var result = await HandleSingleDriveAsync(drives[0]);
+                if (result == SingleDriveResult.Cancel)
+                {
+                    return null;
+                }
+                if (result == SingleDriveResult.Unmounted)
+                {
+                    continue; // Loop back to drive selection
+                }
+                // Otherwise, continue to mount/access the drive
+            }
+            else
+            {
+                RenderDriveSummary(drives);
+            }
+
+            // Select drive (auto-select if only one, otherwise prompt)
+            DetectedDrive selectedDrive = drives.Count == 1
+                ? drives[0]
+                : PromptForDriveSelection(drives);
+
             AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine();
-            return selectedDrive.MountPoint;
+
+            // If drive is already mounted, proceed directly to file browser
+            if (selectedDrive.IsMounted && !string.IsNullOrWhiteSpace(selectedDrive.MountPoint))
+            {
+                AnsiConsole.Write(StyleGuide.Info($"Drive {selectedDrive.DeviceName} is already mounted at {selectedDrive.MountPoint}"));
+                AnsiConsole.WriteLine();
+                AnsiConsole.WriteLine();
+                return selectedDrive.MountPoint;
+            }
+
+            // Delegate to DriveMountingHandler for mounting workflow
+            return await DriveMountingHandler.MountDriveAsync(selectedDrive, _mountService);
         }
+    }
 
-        // Prompt for mount point
-        var mountPoint = PromptForMountPoint(selectedDrive);
-        if (mountPoint == null)
-        {
-            return null;
-        }
-
-        // Show confirmation and mount
-        DriveSelectionHelper.RenderMountConfirmationPanel(selectedDrive, mountPoint);
-
-        var confirmed = AnsiConsole.Confirm(
-            $"[{StyleGuide.PrimaryColor}]Proceed with mounting?[/]",
-            defaultValue: true
-        );
-
-        if (!confirmed)
-        {
-            AnsiConsole.Write(StyleGuide.Info("Mount operation cancelled."));
-            AnsiConsole.WriteLine();
-            return null;
-        }
-
-        return await MountDriveAsync(selectedDrive, mountPoint);
+    /// <summary>
+    /// Result of single drive handling
+    /// </summary>
+    private enum SingleDriveResult
+    {
+        Continue,   // Continue with the drive
+        Cancel,     // User cancelled
+        Unmounted   // Drive was unmounted, return to selection
     }
 
     private void ShowSudoRequiredMessage()
     {
-        AnsiConsole.Write(StyleGuide.Warning(
+        MessageRenderer.ShowWarningAndPause(
             "This application requires sudo privileges to mount drives.\n" +
             "Please run: sudo -v"
-        ));
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("Press any key to continue...");
-        Console.ReadKey(true);
+        );
     }
 
     private void ShowNoDrivesFoundMessage()
     {
-        AnsiConsole.Write(StyleGuide.Info("No drives found."));
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("Press any key to exit...");
-        Console.ReadKey(true);
+        MessageRenderer.ShowInfo("No drives found.");
     }
 
     private void ShowStageHeader(List<DetectedDrive> drives)
@@ -140,13 +132,13 @@ public class DriveSelectionPage
         AnsiConsole.WriteLine();
     }
 
-    private async Task<bool> HandleSingleDriveAsync(DetectedDrive drive)
+    private async Task<SingleDriveResult> HandleSingleDriveAsync(DetectedDrive drive)
     {
         var settings = await _settingsRepository.LoadAsync();
 
         if (settings.SkipSingleDriveConfirmation)
         {
-            return true;
+            return SingleDriveResult.Continue;
         }
 
         var driveStatusText = drive.IsMounted ? "drive (already mounted)" : "drive";
@@ -156,22 +148,38 @@ public class DriveSelectionPage
         AnsiConsole.WriteLine();
 
         var actionText = drive.IsMounted ? "access this drive" : "mount this drive";
+
+        // Build choices based on mount status
+        var choices = new List<string>
+        {
+            $"Yes, {actionText}",
+            "No, cancel",
+            "Yes, and don't ask again"
+        };
+
+        // Add unmount option if drive is already mounted
+        if (drive.IsMounted)
+        {
+            choices.Insert(1, "Unmount and choose another drive");
+        }
+
         var choice = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title($"[{StyleGuide.PrimaryColor}]There's only one option. Would you like to continue?[/]")
-                .AddChoices(new[]
-                {
-                    $"Yes, {actionText}",
-                    "No, cancel",
-                    "Yes, and don't ask again"
-                })
+                .AddChoices(choices)
         );
 
         if (choice == "No, cancel")
         {
             AnsiConsole.Write(StyleGuide.Info("Operation cancelled."));
             AnsiConsole.WriteLine();
-            return false;
+            return SingleDriveResult.Cancel;
+        }
+
+        if (choice == "Unmount and choose another drive")
+        {
+            await UnmountDriveAsync(drive);
+            return SingleDriveResult.Unmounted;
         }
 
         if (choice == "Yes, and don't ask again")
@@ -183,7 +191,50 @@ public class DriveSelectionPage
         }
 
         AnsiConsole.WriteLine();
-        return true;
+        return SingleDriveResult.Continue;
+    }
+
+    /// <summary>
+    /// Unmounts a drive and shows the result
+    /// </summary>
+    private async Task UnmountDriveAsync(DetectedDrive drive)
+    {
+        if (string.IsNullOrWhiteSpace(drive.MountPoint))
+        {
+            MessageRenderer.ShowErrorAndPause("Cannot unmount: Mount point is unknown.");
+            return;
+        }
+
+        var confirmed = AnsiConsole.Confirm(
+            $"[{StyleGuide.WarningColor}]Are you sure you want to unmount {drive.DeviceName} from {drive.MountPoint}?[/]",
+            defaultValue: false
+        );
+
+        if (!confirmed)
+        {
+            MessageRenderer.ShowInfo("Unmount cancelled.");
+            return;
+        }
+
+        AnsiConsole.WriteLine();
+
+        var result = await AnsiConsole.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync($"Unmounting {drive.MountPoint}...", async ctx =>
+            {
+                return await _mountService.UnmountDriveAsync(drive.MountPoint);
+            });
+
+        AnsiConsole.WriteLine();
+
+        if (result.Success)
+        {
+            MessageRenderer.ShowSuccessAndPause($"Successfully unmounted {drive.DeviceName} from {drive.MountPoint}");
+        }
+        else
+        {
+            MessageRenderer.ShowErrorAndPause($"Failed to unmount: {result.ErrorMessage}");
+        }
     }
 
     private void RenderDriveSummary(List<DetectedDrive> drives)
@@ -210,113 +261,4 @@ public class DriveSelectionPage
         );
     }
 
-    private string? PromptForMountPoint(DetectedDrive selectedDrive)
-    {
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine($"[{StyleGuide.PrimaryColor}]Step 2: Choose Mount Point[/]");
-        AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]This is where the drive will be accessible in your filesystem.[/]");
-        AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Type 'help' for more information, or press Enter to use the default.[/]");
-        AnsiConsole.WriteLine();
-
-        var defaultMountPoint = DriveSelectionHelper.GetDefaultMountPoint(selectedDrive);
-
-        while (true)
-        {
-            var input = AnsiConsole.Prompt(
-                new TextPrompt<string>($"[{StyleGuide.PrimaryColor}]Mount point:[/]")
-                    .DefaultValue(defaultMountPoint)
-                    .AllowEmpty()
-            );
-
-            // Handle help request
-            if (input.Equals("help", StringComparison.OrdinalIgnoreCase) || input == "?")
-            {
-                DriveSelectionHelper.ShowMountPointHelp(defaultMountPoint);
-                continue;
-            }
-
-            // Use default if empty
-            if (string.IsNullOrWhiteSpace(input))
-            {
-                input = defaultMountPoint;
-            }
-
-            // Validate path
-            var validation = MountPointValidator.Validate(input);
-            if (!validation.IsValid)
-            {
-                AnsiConsole.MarkupLine($"[{StyleGuide.ErrorColor}]{Markup.Escape(validation.ErrorMessage)}[/]");
-                AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Type 'help' for guidance.[/]");
-                AnsiConsole.WriteLine();
-                continue;
-            }
-
-            return input;
-        }
-    }
-
-    private async Task<string?> MountDriveAsync(DetectedDrive selectedDrive, string mountPoint)
-    {
-        AnsiConsole.WriteLine();
-
-        MountService.MountResult result = await AnsiConsole.Status()
-            .Spinner(Spinner.Known.Dots)
-            .StartAsync($"Mounting {selectedDrive.DeviceName} to {mountPoint}...", async ctx =>
-            {
-                return await _mountService.MountDriveAsync(
-                    selectedDrive.DevicePath,
-                    mountPoint,
-                    selectedDrive.FileSystemType,
-                    selectedDrive.IsWindowsDrive
-                );
-            });
-
-        AnsiConsole.WriteLine();
-
-        if (result.Success)
-        {
-            return HandleMountSuccess(result, selectedDrive);
-        }
-        else
-        {
-            HandleMountFailure(result, selectedDrive);
-            AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Press any key to continue...[/]");
-            Console.ReadKey(true);
-            return null;
-        }
-    }
-
-    private string? HandleMountSuccess(MountService.MountResult result, DetectedDrive selectedDrive)
-    {
-        // Validate mount point - should never be null/empty on success
-        if (string.IsNullOrWhiteSpace(result.MountPoint))
-        {
-            AnsiConsole.Write(StyleGuide.Error("Internal error: Mount succeeded but mount point is empty."));
-            AnsiConsole.WriteLine();
-            return null;
-        }
-
-        AnsiConsole.Write(StyleGuide.Success($"Successfully mounted {selectedDrive.DeviceName} to {result.MountPoint}"));
-        AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
-
-        AnsiConsole.MarkupLine($"[{StyleGuide.PrimaryColor}]What's Next:[/]");
-        AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Your drive is now accessible at:[/] [cyan]{Markup.Escape(result.MountPoint)}[/]");
-        AnsiConsole.WriteLine();
-
-        return result.MountPoint;
-    }
-
-    private void HandleMountFailure(MountService.MountResult result, DetectedDrive selectedDrive)
-    {
-        AnsiConsole.Write(StyleGuide.Error($"Failed to mount drive: {result.ErrorMessage}"));
-        AnsiConsole.WriteLine();
-        AnsiConsole.WriteLine();
-
-        AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Common issues:[/]");
-        AnsiConsole.MarkupLine($"  • Directory already exists - try a different mount point");
-        AnsiConsole.MarkupLine($"  • Permission denied - ensure sudo access is configured");
-        AnsiConsole.MarkupLine($"  • Drive already mounted - check with 'mount | grep {Markup.Escape(selectedDrive.DeviceName)}'");
-        AnsiConsole.WriteLine();
-    }
 }
