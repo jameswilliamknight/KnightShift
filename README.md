@@ -1,6 +1,8 @@
 # KnightShift
 
 > **Built with AI**: This project was created using [Claude Code v2.0.22](https://claude.com/claude-code) and Claude Sonnet 4.5 on October 20, 2025.
+>
+> **Author**: James Knight - [jknightdev.com](https://jknightdev.com)
 
 A powerful command-line TUI (Text User Interface) application for managing drives and organizing files in WSL (Windows Subsystem for Linux).
 
