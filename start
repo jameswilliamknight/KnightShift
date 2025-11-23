@@ -142,11 +142,21 @@ fi
 
 # Check if global symlink exists and offer to create it
 SYMLINK_PATH="/usr/local/bin/knightshift"
-if [ ! -e "$SYMLINK_PATH" ] && [ -t 0 ]; then
-    # Only prompt if running interactively (stdin is a terminal)
+CONFIG_DIR="$HOME/.config/knightshift"
+SKIP_PROMPT_FILE="$CONFIG_DIR/skip-symlink-prompt"
+
+if [ ! -e "$SYMLINK_PATH" ] && [ ! -f "$SKIP_PROMPT_FILE" ] && [ -t 0 ]; then
+    # Only prompt if running interactively (stdin is a terminal) and user hasn't opted out
     echo ""
     echo "ℹ️  Global symlink not found at: $SYMLINK_PATH"
-    read -p "Would you like to create it? This allows you to run 'knightshift' from anywhere (y/n) " -n 1 -r
+    echo "   This allows you to run 'knightshift' from anywhere on your system."
+    echo ""
+    echo "   Options:"
+    echo "     y - Yes, create the symlink (requires sudo)"
+    echo "     n - No, skip for now (will ask again next time)"
+    echo "     d - Don't ask me again"
+    echo ""
+    read -p "Your choice [y/n/d]: " -n 1 -r
     echo ""
 
     if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -160,6 +170,13 @@ if [ ! -e "$SYMLINK_PATH" ] && [ -t 0 ]; then
         else
             echo "❌ Failed to create symlink"
         fi
+        echo ""
+    elif [[ $REPLY =~ ^[Dd]$ ]]; then
+        # Create config directory if it doesn't exist
+        mkdir -p "$CONFIG_DIR"
+        # Create skip prompt file
+        touch "$SKIP_PROMPT_FILE"
+        echo "✓ Won't ask again. (To re-enable: rm $SKIP_PROMPT_FILE)"
         echo ""
     else
         echo "Skipping symlink creation."
