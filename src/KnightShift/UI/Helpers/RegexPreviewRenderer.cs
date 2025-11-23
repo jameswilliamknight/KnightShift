@@ -242,17 +242,24 @@ public static class RegexPreviewRenderer
             $"  [yellow]^\\d{{4}}_[/]       Remove date prefix like '2024_'\n" +
             $"  [yellow](\\d{{4}}).*[/]    Keep only year: [green]$1[/]\n" +
             $"  [yellow]\\s+[/]            Replace multiple spaces with one\n\n" +
-            "[grey]Press any key to return...[/]"
+            $"[{StyleGuide.Muted}]Press ESC to return...[/]"
         );
 
         var panel = new Panel(helpText)
         {
+            Header = new PanelHeader("Regex Replace Help", Justify.Center),
             Border = BoxBorder.Rounded,
             BorderStyle = new Style(StyleGuide.PrimaryColor),
-            Padding = new Padding(2, 1)
+            Padding = new Padding(3, 2),
+            Expand = true
         };
 
         AnsiConsole.Write(panel);
-        Console.ReadKey(true);
+
+        // Wait for ESC key specifically (better UX than "any key")
+        while (Console.ReadKey(true).Key != ConsoleKey.Escape)
+        {
+            // Keep waiting for ESC
+        }
     }
 }

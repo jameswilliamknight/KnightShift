@@ -1,0 +1,131 @@
+# Versioning Strategy for KnightShift
+
+## ⚠️ FULLY AUTOMATED - DO NOT MANUALLY VERSION
+
+KnightShift uses **fully automated versioning** via GitHub Actions. **DO NOT** manually create tags, edit version numbers, or create releases.
+
+## How Versioning Works
+
+### Automatic Versioning Process
+
+1. **You push code to `main`** → GitHub Actions workflow triggers (`.github/workflows/build.yml`)
+2. **Workflow determines next version**:
+   - Finds latest `-pre-alpha` release (e.g., `v0.1.5-pre-alpha`)
+   - Auto-increments **PATCH** version (e.g., `v0.1.6-pre-alpha`)
+3. **Workflow builds binaries** for all platforms (Linux, Windows, macOS)
+4. **Workflow creates GitHub release** with:
+   - Git tag (e.g., `v0.1.6-pre-alpha`)
+   - Release notes
+   - All platform binaries
+5. **Done!** Release is live automatically
+
+### Version Format
+
+All releases follow this pattern during pre-alpha:
+
+```
+v{MAJOR}.{MINOR}.{PATCH}-pre-alpha
+```
+
+**Current Series**: `v0.1.x-pre-alpha`
+- `0.1.x` indicates pre-alpha development
+- Patch version auto-increments on every push to main
+- When ready for beta: manually create `v0.2.0-beta` to start new series
+
+### NO Manual Version Management
+
+**DO NOT** do any of the following:
+- ❌ Add `<Version>` properties to `KnightShift.csproj`
+- ❌ Create git tags manually with `git tag`
+- ❌ Create GitHub releases manually with `gh release create`
+- ❌ Guess or calculate version numbers
+
+The **ONLY** version source is the GitHub Actions workflow logic in `.github/workflows/build.yml` (lines 137-162).
+
+## Checking Current Version
+
+To check the latest version:
+
+```bash
+# View latest release
+gh release view --json tagName,name,publishedAt
+
+# List recent releases
+gh release list --limit 10
+
+# See all git tags
+git tag -l --sort=-v:refname | head -10
+```
+
+## What to Do Instead
+
+### For Regular Development
+Just push to main - versioning happens automatically:
+
+```bash
+git add .
+git commit -m "Add new feature"
+git push
+# → Workflow auto-creates v0.1.{n+1}-pre-alpha
+```
+
+### For Major Milestones
+When ready to transition from pre-alpha to beta or stable:
+
+1. Manually create a milestone tag to start new series:
+   ```bash
+   # Start beta series
+   git tag -a v0.2.0-beta -m "Version 0.2.0-beta - First Beta Release"
+   git push --tags
+   ```
+
+2. Update workflow to use new series pattern (change `-pre-alpha` to `-beta`)
+
+### Troubleshooting Version Conflicts
+
+If you accidentally created manual tags/versions:
+
+```bash
+# 1. Delete the conflicting tag locally and remotely
+git tag -d vX.Y.Z-pre-alpha
+git push origin :refs/tags/vX.Y.Z-pre-alpha
+
+# 2. Delete any conflicting GitHub release
+gh release delete vX.Y.Z-pre-alpha
+
+# 3. Let workflow recreate on next push
+git push
+```
+
+## Semantic Versioning Reference
+
+While we use auto-increment for pre-alpha, here's what each version part means:
+
+- **MAJOR (X.0.0)**: Breaking changes, incompatible API changes
+- **MINOR (0.X.0)**: New features, backwards-compatible additions
+- **PATCH (0.0.X)**: Bug fixes, backwards-compatible fixes
+
+**For KnightShift pre-alpha**: All changes increment PATCH (0.1.x → 0.1.{x+1})
+
+## Why Fully Automated?
+
+**Benefits:**
+✅ Zero manual effort - just push code
+✅ No version conflicts or mistakes
+✅ Consistent release process
+✅ Auto-built binaries for all platforms
+✅ Fast iteration during development
+
+**Trade-offs:**
+⚠️ Less control over version numbers
+⚠️ Every push to main creates a release
+⚠️ Can't have "unreleased" changes on main
+
+## Questions?
+
+- **"What version will the next push create?"** → Check latest release + 1 patch
+- **"Can I control the version number?"** → Not during pre-alpha. Just push and trust the workflow.
+- **"How do I see what's in a release?"** → `gh release view vX.Y.Z-pre-alpha`
+- **"Can I skip a version?"** → No, workflow always increments by 1
+
+For any versioning questions, check `.github/workflows/build.yml` lines 137-162 for the source of truth.

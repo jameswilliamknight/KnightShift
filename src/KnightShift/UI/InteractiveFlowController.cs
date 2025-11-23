@@ -1,5 +1,6 @@
 using Spectre.Console;
 using KnightShift.Services;
+using KnightShift.UI.Helpers;
 
 namespace KnightShift.UI;
 
@@ -10,13 +11,20 @@ public class InteractiveFlowController
 {
     private readonly DriveSelectionPage _driveSelectionPage;
     private readonly FileBrowserPage _fileBrowserPage;
+    private readonly MountService _mountService;
+    private readonly ISettingsRepository _settingsRepository;
+    private readonly List<string> _sessionMountedDrives = new();
 
     public InteractiveFlowController(
         DriveSelectionPage driveSelectionPage,
-        FileBrowserPage fileBrowserPage)
+        FileBrowserPage fileBrowserPage,
+        MountService mountService,
+        ISettingsRepository settingsRepository)
     {
         _driveSelectionPage = driveSelectionPage;
         _fileBrowserPage = fileBrowserPage;
+        _mountService = mountService;
+        _settingsRepository = settingsRepository;
     }
 
     /// <summary>
@@ -36,10 +44,13 @@ public class InteractiveFlowController
 
                 if (mountPoint == null)
                 {
-                    // User cancelled or unmounted - show goodbye
-                    ShowGoodbye(success: false);
+                    // User cancelled or unmounted - show goodbye with unmount prompt
+                    await ShowGoodbyeWithUnmountCheckAsync(success: false);
                     return;
                 }
+
+                // Track if this is a newly mounted drive in /mnt/*
+                TrackSessionMount(mountPoint);
 
                 // Step 2: Browse mounted drive
                 await _fileBrowserPage.ShowAsync(mountPoint);
@@ -53,8 +64,8 @@ public class InteractiveFlowController
 
                 if (!continueSession)
                 {
-                    // Exit
-                    ShowGoodbye(success: true);
+                    // Exit with unmount prompt
+                    await ShowGoodbyeWithUnmountCheckAsync(success: true);
                     return;
                 }
             }
@@ -62,11 +73,7 @@ public class InteractiveFlowController
         catch (Exception ex)
         {
             AnsiConsole.Clear();
-            AnsiConsole.Write(StyleGuide.Error($"An error occurred: {ex.Message}"));
-            AnsiConsole.WriteLine();
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"[{StyleGuide.Muted}]Press any key to exit...[/]");
-            Console.ReadKey(true);
+            MessageRenderer.ShowErrorAndPause($"An error occurred: {ex.Message}");
         }
     }
 
@@ -89,11 +96,49 @@ public class InteractiveFlowController
             Header = new PanelHeader($"{StyleGuide.USB} KnightShift", Justify.Center),
             Border = BoxBorder.Double,
             BorderStyle = new Style(Color.DodgerBlue1),
-            Padding = new Padding(2, 1)
+            Padding = new Padding(3, 2)
         };
 
         AnsiConsole.Write(welcomePanel);
         AnsiConsole.WriteLine();
+    }
+
+    /// <summary>
+    /// Tracks mount point if it's in /mnt/ and not already tracked
+    /// </summary>
+    private void TrackSessionMount(string mountPoint)
+    {
+        // Only track mounts in /mnt/* to avoid tracking system mounts
+        if (mountPoint.StartsWith("/mnt/") && !_sessionMountedDrives.Contains(mountPoint))
+        {
+            _sessionMountedDrives.Add(mountPoint);
+        }
+    }
+
+    /// <summary>
+    /// Shows goodbye message with optional unmount prompt for session-mounted drives
+    /// </summary>
+    private async Task ShowGoodbyeWithUnmountCheckAsync(bool success)
+    {
+        // Check if we have any session-mounted drives to unmount
+        if (_sessionMountedDrives.Count > 0)
+        {
+            var drivesToUnmount = await UI.Helpers.UnmountPromptHandler.ShowUnmountPromptAsync(
+                _sessionMountedDrives,
+                _settingsRepository
+            );
+
+            if (drivesToUnmount != null && drivesToUnmount.Count > 0)
+            {
+                await UI.Helpers.UnmountPromptHandler.PerformUnmountAsync(
+                    drivesToUnmount,
+                    _mountService
+                );
+            }
+        }
+
+        // Show goodbye message
+        ShowGoodbye(success);
     }
 
     private void ShowGoodbye(bool success)
@@ -104,7 +149,7 @@ public class InteractiveFlowController
         {
             var goodbyePanel = new Panel(
                 new Markup(
-                    $"[{StyleGuide.Success}]Thank you for using KnightShift![/]\n\n" +
+                    $"[{StyleGuide.SuccessMarkup}]Thank you for using KnightShift![/]\n\n" +
                     $"Your session has ended successfully.\n\n" +
                     $"[{StyleGuide.Muted}]Run with --interactive or -i to start again.[/]"
                 )
@@ -113,7 +158,7 @@ public class InteractiveFlowController
                 Header = new PanelHeader($"{StyleGuide.CheckMark} Session Complete", Justify.Center),
                 Border = BoxBorder.Rounded,
                 BorderStyle = new Style(Color.Green),
-                Padding = new Padding(2, 1)
+                Padding = new Padding(3, 2)
             };
 
             AnsiConsole.Write(goodbyePanel);
@@ -144,7 +189,12 @@ public class InteractiveFlowController
         var textRemovalPage = new TextRemovalPage(renameService, browserService);
         var fileBrowserPage = new FileBrowserPage(browserService, textRemovalPage, propertiesPanel);
 
-        // Create controller
-        return new InteractiveFlowController(driveSelectionPage, fileBrowserPage);
+        // Create controller with mount service and settings for unmount tracking
+        return new InteractiveFlowController(
+            driveSelectionPage,
+            fileBrowserPage,
+            mountService,
+            settingsRepository
+        );
     }
 }

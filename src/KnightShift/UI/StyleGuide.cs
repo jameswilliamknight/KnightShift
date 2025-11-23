@@ -4,11 +4,19 @@ using Spectre.Console.Rendering;
 namespace KnightShift.UI;
 
 /// <summary>
-/// Centralized style definitions for consistent UI appearance
+/// Centralized style definitions for consistent UI appearance.
+///
+/// <para><b>IMPORTANT:</b> Don't confuse methods with constants!</para>
+/// <para>
+/// ❌ WRONG: <c>new Markup($"[{StyleGuide.Success}]text[/]")</c> - Success is a METHOD<br/>
+/// ✅ RIGHT: <c>new Markup($"[{StyleGuide.SuccessMarkup}]text[/]")</c> - SuccessMarkup is a CONSTANT<br/>
+/// ✅ BETTER: <c>StyleGuide.Success("text")</c> - Use the method directly (handles escaping)
+/// </para>
 /// </summary>
 public static class StyleGuide
 {
-    // Color markup strings (for use in markup text)
+    // Color markup strings (for use in markup text within string interpolation)
+    // Use these constants when building markup strings like: $"[{StyleGuide.SuccessMarkup}]text[/]"
     public const string Primary = "dodgerblue1";
     public const string SuccessMarkup = "green";
     public const string ErrorMarkup = "red";
@@ -93,14 +101,14 @@ public static class StyleGuide
     }
 
     /// <summary>
-    /// Creates a title/header rule
+    /// Creates a title/header rule (centered for better visual balance)
     /// </summary>
     public static Rule CreateTitleRule(string title)
     {
         return new Rule($"[bold]{title}[/]")
         {
             Style = TitleStyle,
-            Justification = Justify.Left
+            Justification = Justify.Center
         };
     }
 
@@ -116,35 +124,50 @@ public static class StyleGuide
     }
 
     /// <summary>
-    /// Formats a success message
+    /// Formats a success message with checkmark icon and bold styling.
+    /// Use this to create a complete styled Markup object, not for string interpolation.
+    /// For markup colors in strings, use <see cref="SuccessMarkup"/> instead.
     /// </summary>
+    /// <param name="message">The message to format (will be escaped automatically)</param>
+    /// <returns>A styled Markup object ready to display</returns>
     public static Markup Success(string message)
     {
-        return new Markup($"[green]{CheckMark}[/] [bold green]{message}[/]");
+        return new Markup($"[green]{CheckMark}[/] [bold green]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
-    /// Formats an error message
+    /// Formats an error message with cross icon and bold styling.
+    /// Use this to create a complete styled Markup object, not for string interpolation.
+    /// For markup colors in strings, use <see cref="ErrorMarkup"/> instead.
     /// </summary>
+    /// <param name="message">The message to format (will be escaped automatically)</param>
+    /// <returns>A styled Markup object ready to display</returns>
     public static Markup Error(string message)
     {
-        return new Markup($"[red]{CrossMark}[/] [bold red]{message}[/]");
+        return new Markup($"[red]{CrossMark}[/] [bold red]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
-    /// Formats a warning message
+    /// Formats a warning message with warning icon and styling.
+    /// Use this to create a complete styled Markup object, not for string interpolation.
+    /// For markup colors in strings, use <see cref="WarningMarkup"/> instead.
     /// </summary>
+    /// <param name="message">The message to format (will be escaped automatically)</param>
+    /// <returns>A styled Markup object ready to display</returns>
     public static Markup Warning(string message)
     {
-        return new Markup($"[orange1]{WarningIcon}[/] [orange1]{message}[/]");
+        return new Markup($"[orange1]{WarningIcon}[/] [orange1]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>
-    /// Formats an info message
+    /// Formats an info message with info icon and styling.
+    /// Use this to create a complete styled Markup object, not for string interpolation.
     /// </summary>
+    /// <param name="message">The message to format (will be escaped automatically)</param>
+    /// <returns>A styled Markup object ready to display</returns>
     public static Markup Info(string message)
     {
-        return new Markup($"[blue]{InfoIcon}[/] [blue]{message}[/]");
+        return new Markup($"[blue]{InfoIcon}[/] [blue]{Markup.Escape(message)}[/]");
     }
 
     /// <summary>

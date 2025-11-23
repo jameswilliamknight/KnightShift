@@ -44,7 +44,8 @@ public class PropertiesPanel
         // Create properties table
         var table = new Table()
             .Border(TableBorder.Rounded)
-            .BorderColor(Color.DodgerBlue1);
+            .BorderColor(Color.DodgerBlue1)
+            .Expand();
 
         table.AddColumn(new TableColumn("Property").Centered());
         table.AddColumn(new TableColumn("Value").Centered());
